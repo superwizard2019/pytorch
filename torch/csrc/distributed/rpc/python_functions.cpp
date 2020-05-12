@@ -123,9 +123,15 @@ c10::intrusive_ptr<JitFuture> wrapFutureMessageInJitFuture(
           if (futureResponseMessage.hasError()) {
             jitFuture->setError(futureResponseMessage.error()->what());
           } else {
-            jitFuture->markCompleted(jit::toIValue(
-                toPyObj(futureResponseMessage.constValue()),
-                PyObjectType::get()));
+            // Keep obj alive until jit::toIValue returns.
+            // See Note [jit::toIValue barrow py::object refcnt] at
+            // jit::toIValue function.
+            py::object obj = toPyObj(futureResponseMessage.constValue());
+            jitFuture->markCompleted(jit::toIValue(obj, PyObjectType::get()));
+            {
+              pybind11::gil_scoped_acquire ag;
+              obj = py::none();
+            }
           }
         });
 
